@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>THÔNG AUDIO</title>
+<style>
+:root{--bg:#0c0d12;--card:#151821;--line:#292d39;--text:#f5f5f5;--muted:#9ca3af;--gold:#d9a441;--red:#d85c52}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+header{position:sticky;top:0;z-index:10;background:#0d0f14ee;backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav{max-width:1100px;margin:auto;padding:14px 18px;display:flex;gap:14px;align-items:center}.brand{font-weight:900;letter-spacing:2px;color:var(--gold);font-size:20px}.spacer{flex:1}
+button,input,textarea,select{font:inherit}button{border:0;border-radius:10px;padding:10px 14px;background:var(--gold);color:#17120a;font-weight:700;cursor:pointer}.ghost{background:#20232d;color:var(--text);border:1px solid var(--line)}
+main{max-width:1100px;margin:auto;padding:24px 18px}.hero{padding:35px 0 22px}.hero h1{font-size:42px;margin:0 0 8px}.muted{color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}.cover{height:190px;border-radius:12px;background:linear-gradient(135deg,#27202b,#111827);display:flex;align-items:center;justify-content:center;color:#bca46e;font-size:30px;font-weight:900;margin-bottom:12px;overflow:hidden}.cover img{width:100%;height:100%;object-fit:cover}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.toolbar{display:flex;gap:10px;margin:18px 0}.toolbar input{flex:1}
+input,textarea,select{width:100%;background:#10131a;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px}textarea{min-height:180px;resize:vertical}.field{margin:10px 0}.field label{display:block;margin-bottom:6px;color:#c8cbd2}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:18px;z-index:30}.modal.show{display:flex}.modalbox{background:var(--card);border:1px solid var(--line);border-radius:18px;max-width:850px;width:100%;max-height:90vh;overflow:auto;padding:20px}.chapter{padding:12px;border-bottom:1px solid var(--line);cursor:pointer}.chapter:hover{background:#1c202a}.content{white-space:pre-wrap;line-height:1.9;font-size:18px}
+.admin{margin-top:24px}.hidden{display:none!important}.status{font-size:12px;padding:4px 8px;border-radius:999px;background:#262b35}.pub{background:#193a2b;color:#8fe0ad}.draft{background:#3b3020;color:#e7bf73}
+@media(max-width:750px){.grid{grid-template-columns:1fr 1fr}.hero h1{font-size:32px}}
+@media(max-width:500px){.grid{grid-template-columns:1fr}.nav{padding:12px}.hero{padding-top:20px}}
+</style>
+</head>
+<body>
+<header><div class="nav"><div class="brand">THÔNG AUDIO</div><div class="spacer"></div><span id="who" class="muted"></span><button id="loginBtn" class="ghost">Đăng nhập</button><button id="logoutBtn" class="ghost hidden">Đăng xuất</button><button id="adminBtn" class="hidden">Admin</button></div></header>
+<main>
+<section class="hero"><h1>Kho truyện của bạn.</h1><div class="muted">Đọc, nghe và tiếp tục chương đang đọc trên mọi thiết bị khi kết nối máy chủ.</div></section>
+<div class="toolbar"><input id="search" placeholder="Tìm tên truyện hoặc tác giả..."><select id="genre"><option value="">Tất cả thể loại</option></select><button onclick="loadStories()">Tìm</button></div>
+<section id="stories" class="grid"></section>
+
+<section id="admin" class="admin hidden">
+<h2>Quản trị THÔNG AUDIO</h2>
+<div class="panel">
+<h3>Đăng truyện</h3>
+<div class="field"><label>Tên truyện</label><input id="stTitle"></div>
+<div class="field"><label>Tác giả</label><input id="stAuthor"></div>
+<div class="field"><label>Thể loại</label><input id="stGenre" value="Xuyên không"></div>
+<div class="field"><label>Mô tả</label><textarea id="stDesc"></textarea></div>
+<div class="field"><label>Ảnh bìa URL (có thể bỏ trống)</label><input id="stCover"></div>
+<div class="row"><select id="stStatus"><option value="draft">Nháp</option><option value="published">Xuất bản</option></select><button onclick="createStory()">Tạo truyện</button></div>
+</div>
+<div id="adminStories" class="grid" style="margin-top:16px"></div>
+</section>
+</main>
+
+<div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div id="modalbox" class="modalbox"></div></div>
+<script>
+const $=id=>document.getElementById(id);
+let token=localStorage.getItem("ta_token"), me=null;
+
+async function api(url,opt={}){opt.headers={...(opt.headers||{}),...(token?{Authorization:"Bearer "+token}:{})}; if(opt.body&&typeof opt.body!=="string"){opt.headers["Content-Type"]="application/json";opt.body=JSON.stringify(opt.body)};const r=await fetch(url,opt);const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Có lỗi");return d}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+async function init(){if(token){try{me=(await api("/api/me")).user;renderUser()}catch{logout()}}await loadGenres();await loadStories()}
+function renderUser(){ $("who").textContent="Xin chào "+me.username; $("loginBtn").classList.toggle("hidden",!!me); $("logoutBtn").classList.toggle("hidden",!me); $("adminBtn").classList.toggle("hidden",me?.role!=="admin")}
+function logout(){localStorage.removeItem("ta_token");token=null;me=null;location.reload()}
+$("logoutBtn").onclick=logout;
+$("loginBtn").onclick=async()=>{const u=prompt("Tên tài khoản:");if(!u)return;const p=prompt("Mật khẩu:");if(!p)return;try{const d=await api("/api/auth/login",{method:"POST",body:{username:u,password:p}});token=d.token;localStorage.setItem("ta_token",token);me=d.user;renderUser();alert("Đăng nhập thành công")}catch(e){alert(e.message)}}
+$("adminBtn").onclick=()=>{$("admin").classList.toggle("hidden");loadAdmin()}
+async function loadGenres(){const gs=await api("/api/genres");$("genre").innerHTML='<option value="">Tất cả thể loại</option>'+gs.map(g=>`<option>${esc(g)}</option>`).join("")}
+async function loadStories(){const qs=new URLSearchParams({q:$("search").value,genre:$("genre").value});const rows=await api("/api/stories?"+qs);$("stories").innerHTML=rows.map(s=>`<article class="card"><div class="cover">${s.cover_url?`<img src="${esc(s.cover_url)}">`:"THÔNG AUDIO"}</div><h3>${esc(s.title)}</h3><div class="muted">${esc(s.author)} · ${s.chapters} chương</div><p class="muted">${esc(s.description).slice(0,120)}</p><button onclick="openStory(${s.id})">Xem truyện</button></article>`).join("")||'<div class="muted">Chưa có truyện.</div>'}
+async function openStory(id){const s=await api("/api/stories/"+id);$("modalbox").innerHTML=`<div class="row"><h2 style="flex:1">${esc(s.title)}</h2><button class="ghost" onclick="closeModal()">Đóng</button></div><p class="muted">${esc(s.author)} · ${esc(s.genre)} · ${s.views} lượt xem</p><p>${esc(s.description)}</p><h3>Danh sách chương</h3>${s.chapters.map(c=>`<div class="chapter" onclick="readChapter(${s.id},${c.id})">Chương ${c.chapter_number}: ${esc(c.title)}</div>`).join("")}`;$("modal").classList.add("show")}
+async function readChapter(storyId,cid){const c=await api(`/api/stories/${storyId}/chapters/${cid}`);if(token)api("/api/progress",{method:"POST",body:{storyId,chapterId:cid}});$("modalbox").innerHTML=`<div class="row"><button class="ghost" onclick="openStory(${storyId})">← Danh sách chương</button><button class="ghost" onclick="speak()">🔊 Đọc</button><button class="ghost" onclick="speechSynthesis.cancel()">⏹ Dừng</button></div><h2>${esc(c.title)}</h2><div id="readtext" class="content">${esc(c.content)}</div>`;$("modal").classList.add("show")}
+function speak(){speechSynthesis.cancel();const t=$("readtext")?.innerText;if(!t)return;const u=new SpeechSynthesisUtterance(t);u.lang="vi-VN";speechSynthesis.speak(u)}
+function closeModal(){$("modal").classList.remove("show");speechSynthesis.cancel()}
+async function loadAdmin(){if(me?.role!=="admin")return;const rows=await api("/api/admin/stories");$("adminStories").innerHTML=rows.map(s=>`<div class="card"><h3>${esc(s.title)}</h3><span class="status ${s.status==="published"?"pub":"draft"}">${s.status}</span><p>${s.chapters} chương · ${s.views} lượt xem</p><div class="row"><button onclick="addChapter(${s.id})">+ Chương</button><button class="ghost" onclick="togglePublish(${s.id},'${s.status}')">${s.status==="published"?"Ẩn":"Xuất bản"}</button><button class="ghost" onclick="deleteStory(${s.id})">Xóa</button></div></div>`).join("")}
+async function createStory(){try{await api("/api/admin/stories",{method:"POST",body:{title:$("stTitle").value,author:$("stAuthor").value,genre:$("stGenre").value,description:$("stDesc").value,cover_url:$("stCover").value,status:$("stStatus").value}});alert("Đã tạo truyện");loadAdmin();loadGenres();loadStories()}catch(e){alert(e.message)}}
+async function addChapter(id){const title=prompt("Tên chương:");if(!title)return;const content=prompt("Nội dung chương:");if(!content)return;try{await api(`/api/admin/stories/${id}/chapters`,{method:"POST",body:{title,content}});alert("Đã thêm chương");loadAdmin()}catch(e){alert(e.message)}}
+async function togglePublish(id,status){await api("/api/admin/stories/"+id,{method:"PUT",body:{...(await api("/api/admin/stories")).find(x=>x.id===id),status:status==="published"?"draft":"published"}});loadAdmin();loadStories()}
+async function deleteStory(id){if(!confirm("Xóa truyện và toàn bộ chương?"))return;await api("/api/admin/stories/"+id,{method:"DELETE"});loadAdmin();loadStories()}
+init();
+</script>
+</body>
+</html>
